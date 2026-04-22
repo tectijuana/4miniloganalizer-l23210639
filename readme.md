@@ -1,116 +1,136 @@
-# ======================================================
-# ARCHIVO 1: analyzer.s
-# ======================================================
-cat << 'EOF' > analyzer.s
+# 🎓 Tecnológico Nacional de México
+## 🏫 Instituto Tecnológico de Tijuana
+**Subdirección Académica** **Departamento de Sistemas y Computación** **Ingeniería en Sistemas Computacionales**
+
+---
+
+**📑 LENGUAJES DE INTERFAZ** **👨‍🏫 Profesor:** MC. René Solis Reyes  
+**📅 Semestre:** Ene - Jun 2026  
+
+---
+
+**📝 Práctica Bloque:** Implementación de un Mini Cloud Log Analyzer en ARM64  
+**🎯 Objetivo:** Diseñar una solución en ensamblador para detectar 3 errores HTTP consecutivos (4xx/5xx).  
+**👤 Estudiante:** Ornelas Torres Juan Carlos  
+**🆔 Número de Control:** 23210639  
+
+---
+
+### 📖 Explicación del Algoritmo
+Para cumplir con la detección de **3 errores consecutivos**, el programa sigue esta lógica:
+1.  **Monitoreo:** Se usa el registro `X10` como contador de "racha".
+2.  **Detección de Errores:** Si el primer dígito de un código es '4' o '5', se suma 1 a `X10`.
+3.  **Reinicio por Éxito:** Si aparece cualquier otro número (como el '2' de un 200 OK), el registro `X10` se limpia (`mov x10, #0`). Esto garantiza que solo se dispare la alerta si los fallos ocurren uno tras otro.
+4.  **Alerta:** Al llegar a 3 en el contador, se emite el mensaje crítico por consola.
+
+---
+
+### 💻 Implementación de Código (Todo en uno)
+
+#### 📄 1. Código Fuente (`analyzer.s`)
+```assembly
 .data
-    msg_alert:  .ascii "\n[CRITICAL] 3 Consecutive Errors Detected!\n"
-    len_alert:  .quad 43
+    msg_alert:  .ascii "\n⚠️  [ALERTA CRÍTICA] Se detectaron 3 errores consecutivos!\n"
+    len_alert:  .quad 60
     buffer:     .byte 0
 
 .text
 .global _start
 
 _start:
-    mov x10, #0          // Inicializar contador de errores consecutivos
+    mov x10, #0          // 🔢 Inicializar contador de errores consecutivos
 
 read_char:
-    // Leer un byte de la entrada estándar (stdin)
-    mov x0, #0           // fd 0: stdin
-    ldr x1, =buffer
-    mov x2, #1           // leer 1 byte
-    mov x8, #63          // syscall: read
+    // 📥 Syscall read(stdin, buffer, 1)
+    mov x0, #0           
+    ldr x1, =buffer      
+    mov x2, #1           
+    mov x8, #63          
     svc #0
 
-    // Si read retorna 0 o menos, es el fin del archivo (EOF)
+    // 🛑 Verificar fin de archivo (EOF)
     cmp x0, #0
     ble exit_normal
 
-    ldrb w2, [x1]        // Cargar el byte leído
+    ldrb w2, [x1]        // 📥 Cargar byte leído
 
-    // Filtrar caracteres no numéricos (espacios, tabs, saltos de línea)
+    // 🔍 Filtro: Solo procesar dígitos numéricos ASCII (0-9)
     cmp w2, #'0'
-    blo read_char        // Si es menor a '0', ignorar
+    blo read_char
     cmp w2, #'9'
-    bhi read_char        // Si es mayor a '9', ignorar
+    bhi read_char
 
-    // Lógica de detección de errores (Códigos 4xx y 5xx)
+    // 🚥 Lógica de detección: ¿Es error? (4xx o 5xx)
     cmp w2, #'4'
     b.eq increment_error
     cmp w2, #'5'
     b.eq increment_error
 
-    // SI NO ES ERROR: Reiniciar contador (Rompe la racha consecutiva)
+    // ✅ SI NO ES ERROR: Reiniciar racha (rompe la consecutividad)
     mov x10, #0
     b read_char
 
 increment_error:
-    add x10, x10, #1     // Sumar 1 al contador de consecutivos
-    cmp x10, #3          // ¿Llegamos al límite?
+    add x10, x10, #1     // ➕ Aumentar racha de errores
+    cmp x10, #3          // 🚨 ¿Llegamos al límite crítico?
     b.ge trigger_alert
-    b read_char
+    b read_char          
 
 trigger_alert:
-    // Imprimir mensaje de alerta
-    mov x0, #1           // fd 1: stdout
-    ldr x1, =msg_alert
-    ldr x2, =len_alert
-    ldr x2, [x2]
-    mov x8, #64          // syscall: write
+    // 📢 Imprimir alerta mediante syscall write
+    mov x0, #1           
+    ldr x1, =msg_alert   
+    ldr x2, =len_alert   
+    ldr x2, [x2]         
+    mov x8, #64          
     svc #0
     
-    // Salir con código 1 indicando hallazgo
-    mov x0, #1
-    mov x8, #93
+    mov x0, #1           // 🚩 Salida con estado de alerta (1)
+    mov x8, #93          
     svc #0
 
 exit_normal:
-    mov x0, #0           // Salida limpia (0 errores consecutivos detectados)
+    mov x0, #0           // ✨ Salida estándar (0)
     mov x8, #93
     svc #0
-EOF
 
-# ======================================================
-# ARCHIVO 2: Makefile
-# ======================================================
-cat << 'EOF' > Makefile
-# Herramientas de compilación para ARM64
+
+MARKFILE
 AS = as
 LD = ld
+TARGET = analyzer
 
-all: analyzer
+all: $(TARGET)
 
-analyzer: analyzer.o
-	$(LD) -o analyzer analyzer.o
+$(TARGET): analyzer.o
+	$(LD) -o $(TARGET) analyzer.o
 
 analyzer.o: analyzer.s
 	$(AS) -o analyzer.o analyzer.s
 
 clean:
-	rm -f analyzer analyzer.o
-EOF
+	@echo "🧹 Limpiando archivos temporales..."
+	rm -f $(TARGET) *.o
 
-# ======================================================
-# ARCHIVO 3: run.sh (Script de ejecución y prueba)
-# ======================================================
-cat << 'EOF' > run.sh
+
+SCRIPT
+
 #!/bin/bash
-# Compilar el proyecto
+# Dar permisos con: chmod +x run.sh
+
+echo "🔨 Compilando el analizador ARM64..."
 make clean
 make
 
-# Crear un archivo de prueba: 
-# Caso 1: 2 errores, 1 éxito, 2 errores (No debería disparar)
-# Caso 2: 3 errores seguidos (Debe disparar)
-echo "Ejecutando prueba de errores consecutivos..."
-echo "404 500 200 403 401 503" | ./analyzer
+# 🧪 Simulación de logs: 2 errores, un éxito (200) y 3 errores seguidos.
+LOG_DATA="404 500 200 403 503 500"
+
+echo -e "\n🔍 Analizando flujo de logs en tiempo real..."
+echo "📥 Entrada: $LOG_DATA"
+echo "$LOG_DATA" | ./analyzer
 
 if [ $? -eq 1 ]; then
-    echo "Prueba exitosa: Alerta detectada correctamente."
+    echo -e "\n✅ Resultado: Alerta generada (Prueba Superada)."
 else
-    echo "Prueba fallida o no se encontraron 3 errores consecutivos."
+    echo -e "\n❌ Resultado: No se detectaron 3 errores seguidos."
 fi
-EOF
-
-# Asignar permisos y ejecutar
-chmod +x run.sh
-./run.sh
